@@ -16,7 +16,7 @@ import copy
 
 class KalmanWofostDA():
 
-    def __init__(self, parameters, weather,agromanagement, ensemble_size, override_parameters=None):
+    def __init__(self, ensemble_size, parameters=parameters, weather=weather,agromanagement=agromanagement, override_parameters=None):
         self.__parameters = parameters
         self.__agromanagement = agromanagement
         self.__weather = weather
@@ -29,9 +29,10 @@ class KalmanWofostDA():
             p = copy.deepcopy(parameters)
             if override_parameters == None:
                 Warning("[KalmanWoFoStDA] No override parameters given.")
-            for par, distr in override_parameters.items():
-                # This is were the parameters are modified using the set_override command
-                p.set_override(par, distr[i])
+            else:
+                for par, distr in override_parameters.items():
+                    # This is were the parameters are modified using the set_override command
+                    p.set_override(par, distr[i])
             member = Wofost72_WLP_FD(p, weather, agromanagement)
             self.ensemble.append(member)
     
@@ -75,13 +76,22 @@ class KalmanWofostDA():
             _ = member.set_variable("LAI", new_states.LAI)
             _ = member.set_variable("SM", new_states.SM)
 
-    def displayLAIsM(self):
-        print("[KalmanWoFoStDA] Displayint data for {} up to day {} ".format(len(self.ensemble), self.ensemble[0].get_variable("day")))
+    def displayLAIsM(self, average=False):
+        print("[KalmanWoFoStDA] Displaying data for {} up to day {} ".format(len(self.ensemble), self.ensemble[0].get_variable("day")))
         results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
         fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16,16), sharex=True)
-        for member_df in results:
-            member_df["LAI"].plot(style="k:", ax=axes[0])
-            member_df["SM"].plot(style="k:", ax=axes[1])
+        if not average:
+            for member_df in results:
+                member_df["LAI"].plot(style="k:", ax=axes[0])
+                member_df["SM"].plot(style="k:", ax=axes[1])
+        else:
+            average = sum(results)/len(results)
+            average["LAI"].plot(style="r-", ax=axes[0])
+            average["SM"].plot(style="r-", ax=axes[1])
+        if self._observations != None:
+            val_lai = [element['LAI'][0] for element in self._observations.values()]
+            err_lai = [element['LAI'][1] for element in self._observations.values()]
+            axes[0].errorbar(self._observations.keys(),list(val_lai),yerr=err_lai, fmt='o')   
         # axes[0].errorbar(self._observations.keys(), self._observations.values, fmt="o")
         # axes[1].errorbar(self._observations.keys, self._observations.values, yerr=std_sm, fmt="o")
         axes[0].set_title("Leaf area index")
@@ -92,7 +102,7 @@ class KalmanWofostDA():
     def batchAssimilate(self, observations):
         for obs in observations:
             self.assimilate(obs)
-        self.display()
+        print("[KalmanWoFostDA] {} observations assimilated".format(len(observations)))
     
     def completeSim(self):
         for member in self.ensemble:
@@ -101,3 +111,21 @@ class KalmanWofostDA():
     def moveForward(self, days=1):
         for member in self.ensemble:
             member.run(days)
+    
+    def getState(self, specific="all"):
+        returned_states= []
+        specifics = {"all": [self.__parameters,self.__weather, self.__agromanagement]}
+        return specifics[specific]
+
+    def evaluate(self):
+        def diff(a,b):
+            t = 0
+            for el in set(a.keys()).intersection(b.keys()):
+                t+= (a[el]-b[el])**2
+            return t
+        globalv = {}
+        for iter in k.ensemble:
+            globalv[iter] = diff(pd.DataFrame(iter.get_output()).set_index('day')['LAI'],
+                                 pd.DataFrame({element:{'LAI':k._observations[element]['LAI'][0], 'SM':k._observations[element]['SM'][0]} for element in k._observations.keys()}).transpose()['LAI'])
+        return pd.DataFrame(globalv)
+
