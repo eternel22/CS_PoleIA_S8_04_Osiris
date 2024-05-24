@@ -1,0 +1,19 @@
+Version: 1.0
+AgroManagement:
+- 2022-04-22:
+    CropCalendar:
+        crop_name: potato
+        variety_name: Markies
+        crop_start_date: 2022-05-01
+        crop_start_type: emergence
+        crop_end_date: 
+        crop_end_type: maturity
+        max_duration: 365
+    TimedEvents: null
+    StateEvents: null
+- 2022-09-15:
+
+
+
+
+
