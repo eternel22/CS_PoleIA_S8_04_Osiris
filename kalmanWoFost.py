@@ -127,4 +127,32 @@ class KalmanWofostDA():
             globalv[iter] = diff(pd.DataFrame(iter.get_output()).set_index('day')['LAI'],
                                  pd.DataFrame({element:{'LAI':k._observations[element]['LAI'][0], 'SM':k._observations[element]['SM'][0]} for element in k._observations.keys()}).transpose()['LAI'])
         return pd.DataFrame(globalv)
+    
+    def get_avg_RMSE(self):
+        val_sm = [element['SM'][0] for element in self._observations.values()]
+        val_lai = [element['LAI'][0] for element in self._observations.values()]
+        results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
+        RMSE_lai = []
+        RMSE_sm = []
+        
+        for member_df in results:
+            observed_days = list(self._observations.keys())
+            RMSE_sm.append(np.sqrt(np.mean((member_df.loc[observed_days, "SM"] - val_sm)**2)))
+            RMSE_lai.append(np.sqrt(np.mean((member_df.loc[observed_days,"LAI"]-val_lai)**2)))
+        
+        return print('AVG RMSE LAI =', np.mean(RMSE_lai), ', AVG RMSE SM =', np.mean(RMSE_sm))
+    
+    def get_RMSE_avg(self):
+        val_sm = [element['SM'][0] for element in self._observations.values()]
+        val_lai = [element['LAI'][0] for element in self._observations.values()]
+        results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
+        observed_days = list(self._observations.keys())
+        temp_lai= []
+        temp_sm = []
+        for member_df in results:
+            temp_sm.append(member_df.loc[[x + dt.timedelta(days=1) for x in observed_days], "SM"])
+            temp_lai.append(member_df.loc[[x + dt.timedelta(days=1) for x in observed_days], "LAI"])
+        RMSE_lai = np.sqrt(np.mean((np.mean(temp_lai, axis=0) - val_lai)**2))
+        RMSE_sm = np.sqrt(np.mean((np.mean(temp_sm, axis=0) - val_sm)**2))
+        return print('RMSE of AVG LAI =', RMSE_lai, ', RMSE of AVG SM =', RMSE_sm)
 
