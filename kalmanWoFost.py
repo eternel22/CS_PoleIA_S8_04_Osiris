@@ -1,18 +1,13 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from itertools import product
-import pcse
 from pcse.models import Wofost72_WLP_FD
-from pcse.base import ParameterProvider
-from pcse.db import NASAPowerWeatherDataProvider
-from pcse.fileinput import YAMLAgroManagementReader, YAMLCropDataProvider
-from pcse.util import WOFOST72SiteDataProvider, DummySoilDataProvider
 from dataproviders import parameters, agromanagement, weather
 import numpy as np
 import pandas as pd
 import copy
-
+import matplotlib
+matplotlib.style.use('ggplot')
 
 class KalmanWofostDA():
 
@@ -76,10 +71,11 @@ class KalmanWofostDA():
             _ = member.set_variable("LAI", new_states.LAI)
             _ = member.set_variable("SM", new_states.SM)
 
-    def displayLAIsM(self, average=False):
+    def displayLAIsM(self, average=False, fig=None, axes=None):
         print("[KalmanWoFoStDA] Displaying data for {} up to day {} ".format(len(self.ensemble), self.ensemble[0].get_variable("day")))
         results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
-        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16,16), sharex=True)
+        if fig == None:
+            fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(16,16), sharex=True)
         if not average:
             for member_df in results:
                 member_df["LAI"].plot(style="k:", ax=axes[0])
@@ -91,13 +87,16 @@ class KalmanWofostDA():
         if self._observations != None:
             val_lai = [element['LAI'][0] for element in self._observations.values()]
             err_lai = [element['LAI'][1] for element in self._observations.values()]
+            val_sm = [element['SM'][0] for element in self._observations.values()]
+            err_sm = [element['SM'][1] for element in self._observations.values()]
             axes[0].errorbar(self._observations.keys(),list(val_lai),yerr=err_lai, fmt='o')   
+            axes[1].errorbar(self._observations.keys(),list(val_sm),yerr=err_sm, fmt='o')   
         # axes[0].errorbar(self._observations.keys(), self._observations.values, fmt="o")
-        # axes[1].errorbar(self._observations.keys, self._observations.values, yerr=std_sm, fmt="o")
+        # axes[1].errorbar(self._observations.keys(), self._observations.values, yerr=std_sm, fmt="o")
         axes[0].set_title("Leaf area index")
         axes[1].set_title("Volumetric soil moisture")
         fig.autofmt_xdate()
-        plt.show()
+        
 
     def batchAssimilate(self, observations):
         for obs in observations:

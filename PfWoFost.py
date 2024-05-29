@@ -1,16 +1,16 @@
-from data_gen import DataGenerator
-from kalmanWoFost import KalmanWofostDA
 import numpy as np
 import scipy
-import datetime as dt
 import pandas as pd
+import matplotlib
 from matplotlib import pyplot as plt
 from dataproviders import parameters, agromanagement, weather
 from pcse.models import Wofost72_WLP_FD
 import copy
 import os, sys
+matplotlib.style.use('ggplot')
 
 class HiddenPrints:
+    ''' Classe pour empécher l'impression par défaut de python'''
     def __enter__(self):
         self._original_stdout = sys.stdout
         sys.stdout = open(os.devnull, 'w')
@@ -20,17 +20,20 @@ class HiddenPrints:
         sys.stdout = self._original_stdout
 
 class ParticleSetWoFost():
+    '''
+    Classe abstraite pour génerer et gérer un ensemble d'instances WoFost. Elle prend en entrée les paramètres, le temps, et les données météorologiques.
+    '''
     def __init__(self,ensemble_size = 50, parameters=parameters, weather=weather, agromanagement=agromanagement, override_parameters=None):        
         '''
-        Initialize particles. These will be at time 0 and cover the ranges given in the override_parameters.
+        Initialiser les particules. Elles seront à l'instant 0 et couvriront les plages données dans override_parameters.
 
-        Input:
-        - ensemble_size: number of particles to create (int)
-        - parameters, weather, agromanagement: WoFost compatible files
-        - override_parameters: respect the format (ParameterName,[value]*ensemble_size)
+        Entrée:
+        - ensemble_size: nombre de particules à créer (int)
+        - parameters, weather, agromanagement: fichiers compatibles avec WoFost
+        - override_parameters: respecter le format (NomParamètre,[valeur]*ensemble_size)
         
-        Output:
-        - None. Initialised "set" element, containing the parameters.
+        Sortie:
+        - Aucune. Élément "set" initialisé, contenant les paramètres.
 
         '''
         self.__ensemble_size = ensemble_size
@@ -41,7 +44,7 @@ class ParticleSetWoFost():
                 Warning("[ParticleSetWoFost] No override parameters given.")
             else:
                 for par, distr in override_parameters.items():
-                    # This is were the parameters are modified using the set_override command
+                    # This is were the parameters are modified using the set_override command and the distribution given in override_parameters
                     p.set_override(par, distr[i])
             member = Wofost72_WLP_FD(p, weather, agromanagement)
             self.ensemble.append(member)
@@ -51,35 +54,33 @@ class ParticleSetWoFost():
     
     def getDay(self):
         """
-        Get currentday (starts at 0 for simulation beginning)
+        Récupérer le jour actuel (commence à 0 pour le début de la simulation)
         """
         return len(self.ensemble[0].get_output("day"))
     
     def getValues(self,variable="LAI",end=True):
         """
-        Get values of the set.
+        Récupère les valeurs de l'ensemble.
         """
         return [element.get_variable(variable) for element in self.ensemble]
 
     def getParameters(self, index):
         """
-        Return the parameters of a given index element
+        Récupère les paramètres de l'élément d'index donné
         """
         return self.set[self.ensemble[index]]
 
 class PfWoFost():
+    
     def __init__(self, ensemble_size, parameters=parameters, weather=weather, agromanagement=agromanagement, override_parameters=None, override_ranges=None):
         """
-        Initialise the PfWofost object. Creates the initial set of particles, at time t=0
-
-        Input:
-        - ensemble_size: number of particles to create (int)
-        - parameters, weather, agromanagement: WoFost compatible files
-        - override_parameters: names of parameters to vary
-        - override_ranges: mean and std-var of each parameter to vary.
-        
-        Output:
-        - None. Initialised "set" element, containing the parameters.
+        Initialise l'objet PfWofost. Crée l'ensemble initial de particules, à l'instant t=0
+        - parameters, weather, agromanagement: fichiers compatibles WoFost
+        - override_parameters: noms des paramètres à faire varier
+        - override_ranges: moyenne et écart-type de chaque paramètre à faire varier.
+         parameters, weather, agromanagement: WoFost compatible files
+        Sortie:de_parameters: names of parameters to vary
+        - Aucune. Élément "set" initialisé, contenant les paramètres.
         """
         self.__ensemble_size        = ensemble_size
         self.__override_parameters  = override_parameters
@@ -96,7 +97,7 @@ class PfWoFost():
     
     def get_particles_last_value(self, days=0,STATE='LAI'):
         '''
-        Fetch the final values of the particles. This is useful for the assimilation process.
+        Récupère les valeurs finales des particules. Utile pour le processus d'assimilation.
         '''
         for element in self.particle_set.keys():
             element.run(days)
@@ -105,7 +106,7 @@ class PfWoFost():
 
     def predict(self, days=1,date=None):
         '''
-        Move forward in time: "predict" the variables
+        Avancer dans le temps: "prédire" les variables
         '''
         if date:
             for element in self.particle_set.keys():
@@ -123,34 +124,52 @@ class PfWoFost():
                 self.particle_set.pop(list(self.particle_set.keys())[iV])
                 self.weights = np.delete(self.weights,iV)
 
+    def clean(self):
+        """
+        Enlever les particules qui ont des valeurs négatives (absurdes)
+        """
+        values = self.get_particles_last_value()
+        for iV in range(len(values)):
+            if values[iV]<0:
+                print("[REMOVED] Removed element",list(self.particle_set.keys())[iV])
+                self.particle_set.pop(list(self.particle_set.keys())[iV])
+                self.weights = np.delete(self.weights,iV)
+
     def update(self, obs):
         """
-        We need to do this in two steps:
-        - move forward to next observation
-        - update particles, self.weights accordingly
+        On doit mettre à jour en deux étapes:
+        - avancer à l'observation suivante
+        - mettre à jour les particules, les poids en conséquence
         """
         self.predict(date=obs[0])
-        curr_value      = self.get_particles_last_value()
-        w_distance      = np.abs(curr_value-obs[1])+ 1.e-300
-        w_distance      = scipy.stats.norm(0,0.5).pdf(w_distance)
+        curr_value_LAI  = self.get_particles_last_value(STATE='LAI')
+        curr_value_SM   = self.get_particles_last_value(STATE='SM')
+        w_distance_LAI  = np.abs(curr_value_LAI-obs[1])+ 1.e-300
+        w_distance_SM   = np.abs(curr_value_SM-obs[2])+ 1.e-300
+        w_distance      = (scipy.stats.norm(0,0.5).pdf(w_distance_LAI) + scipy.stats.norm(0,0.5).pdf(w_distance_SM))/2
         self.weights   *= w_distance
-        self.weights   /=  sum(self.weights)
+        self.weights   /= sum(self.weights)
 
-    def plot_p(self,fig=plt,all=False):
+    def plot_p(self,fig=None,all=False,ax=None):
         """ 
-        Display the values of interest for the different graphs.
-        "all" allows to trace all the plots instead of just the most recent ones
+        Afficher les valeurs d'intérêt pour les différents graphiques.
+        "all" permet de tracer tous les graphiques au lieu des plus récents
         """
+        if fig is None or ax is None:
+            print("[Display] No fig supplied, creating a new one.")
+            fig, ax = plt.subplots(2,1)
         if not all:
             for index in range(len(self.particle_set)):
-                fig.plot(pd.DataFrame(list(self.particle_set.keys())[index].get_output())['LAI'],color='black',alpha=self.weights[index])
+                ax[0].plot(pd.DataFrame(list(self.particle_set.keys())[index].get_output())['LAI'],color='black',alpha=self.weights[index])
+                ax[1].plot(pd.DataFrame(list(self.particle_set.keys())[index].get_output())['SM'],color='black',alpha=self.weights[index])
         else:
             for index in range(len(self.log_part)):
-                fig.plot(pd.DataFrame(list(self.log_part.keys())[index].get_output())['LAI'],color='black')
+                ax[0].plot(pd.DataFrame(list(self.log_part.keys())[index].get_output())['LAI'],color='black')
+                ax[0].plot(pd.DataFrame(list(self.log_part.keys())[index].get_output())['SM'],color='black')
         
     def estimate(self):
         """
-        Based on the particles, compute the weighted average and std of our simulation (supposedly accurate)
+        D'après les particules, calculer la moyenne et l'écart-type de notre simulation (supposée précise)
         """
         pos = self.get_particles_last_value()
         mean= np.average(pos,weights=self.weights)
@@ -160,9 +179,9 @@ class PfWoFost():
     def neff(self):
         return 1. / np.sum(np.square(self.weights))
 
-    def index_resample(self,indexes):
+    def index_resample(self,indexes,k=5):
         """
-        From a given list of index, recreate new particles close to these indexes.
+        D'après une liste d'index, recréer de nouvelles particules proches de ces index.
         """
         keys = list(self.particle_set.keys())
         # Keep the top 5 particles and their weights
@@ -182,34 +201,59 @@ class PfWoFost():
         new_override_parameters = {self.__override_parameters[index]:np.random.normal(ranges[index][0],ranges[index][1], self.__ensemble_size) for index in range(len(ranges))}
         
         # Now, let's add some more particles:
-        new_set = ParticleSetWoFost(self.__ensemble_size-5,override_parameters=new_override_parameters)
+        new_set = ParticleSetWoFost(self.__ensemble_size-k,override_parameters=new_override_parameters)
         self.particle_set = self.particle_set | new_set.set
         self.log_part = self.log_part | self.particle_set
         self.weights = [1/self.__ensemble_size]*self.__ensemble_size
     
-    def get_five_top(self):
+    def get_K_top(self,k=5):
         indexes = []
         d = self.weights.copy()
-        for i in range(5):
+        for i in range(k):
             indexes.append(d.argmax())
             d[indexes[-1]] = 0
         return indexes
     
     def assimilate(self,obs_list):
-        
+        k=int(self.__ensemble_size/2)
+        fig, ax = plt.subplots(2,1,figsize=(16,16))
         if type(obs_list)!=list:
             obs_list = [obs_list]
         for obs in obs_list:
-            print("===[Assimilate] Currently on observation {}/{} with {} particles".format(obs_list.index(obs)+1,len(obs_list), len(self.particle_set)))
+            print("\n=====[Assimilate] Currently on observation {}/{} with {} particles".format(obs_list.index(obs)+1,len(obs_list), len(self.particle_set)))
             self.update(obs)
             print("[Assimilate] Updated weights. Current LAI estimate: ",self.estimate())
-            plt.scatter(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[1])
+            ax[0].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[1],yerr=obs[1]*0.1, fmt='o',color='red')
+            ax[1].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[2],yerr=obs[2]*0.1, fmt='o',color='red')
             if self.neff() < self.__ensemble_size/2:
                 print("[Resampling] from neff",self.neff())
-                self.index_resample(self.get_five_top())
+                self.index_resample(self.get_K_top(k),k)
                 # recompute weights with new particles
                 self.update(obs)
                 print("[Resampling] New estimate:",self.estimate())
-            self.plot_p()
+            self.plot_p(fig=fig,ax=ax)
+        self.plot_p(fig=fig,ax=ax)
 
+    def avg(self,plot=False,obs_list=[],fig=None, ax=None):
+        """
+        Renvoie la moyenne des particules. Si plot=True, affiche le graphique.
+        """
+        sum1 = pd.DataFrame()
+        sum2 = pd.DataFrame()
+        if fig is None:
+            fig, ax = plt.subplots(2,1)
+        for element in self.particle_set:
+            sum1[element] = pd.DataFrame(element.get_output())['LAI']
+            sum2[element] = pd.DataFrame(element.get_output())['SM']
+        if not plot:
+            return sum1.mean(axis=1), sum2.mean(axis=1)
+        x = list(pd.DataFrame(element.get_output())['day'])
+        ax[0].plot(sum1.mean(axis=1),color='black')
+        ax[1].plot(sum2.mean(axis=1),color='black')
+        for obs in obs_list:
+            ax[0].errorbar((obs[0] - list(self.particle_set.keys())[0].get_output()[0]['day']).days,obs[1],yerr=obs[1]*0.1, fmt='o',color='red')
+            ax[1].errorbar((obs[0] - list(self.particle_set.keys())[0].get_output()[0]['day']).days,obs[2],yerr=obs[2]*0.2, fmt='o',color='red')
+    
+    def get_current_date(self):
+        return list(self.particle_set.keys())[0].get_variable("day")
         
