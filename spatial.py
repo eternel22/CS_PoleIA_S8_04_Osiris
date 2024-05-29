@@ -3,6 +3,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.interpolate import griddata
+import csv
+import pandas as pd
 
 class Spatial_grid:
     def __init__(self, x, y, z):
@@ -66,6 +68,20 @@ class Spatial_grid:
         ax.scatter(self.x, self.y, self.z, color='r', s=50, zorder=10)
         plt.show()
 
+class HumidityData:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.time = []
+        for k in range(1, 7):
+            setattr(self, f'humidity{k}', [])
 
-
+    def read_data(self):
+        data = pd.read_csv(self.file_path, sep=';')
+        self.time = data['Date/heure'].tolist()
+        for k in range(1, 7):
+            setattr(self, f'humidity{k}', data[f'EAG Humidité du sol {k} [%]'].tolist())
+            
+    def get_humidity_values(self):
+        return {'time': self.time, 'humidity1': self.humidity1, 'humidity2': self.humidity2, 'humidity3': self.humidity3,
+                'humidity4': self.humidity4, 'humidity5': self.humidity5, 'humidity6': self.humidity6}
 
