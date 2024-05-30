@@ -3,8 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pcse.models import Wofost72_WLP_FD
 from dataproviders import parameters, agromanagement, weather
-import numpy as np
-import pandas as pd
 import copy
 import matplotlib
 matplotlib.style.use('ggplot')
