@@ -86,6 +86,7 @@ class PfWoFoSt():
         self.__override_parameters  = override_parameters
         self.__override_ranges      = override_ranges
         self.date                   = None
+        self._observations = {}
 
         self.override_parameters    = {override_parameters[index]:np.random.normal(override_ranges[index][0],override_ranges[index][1], self.__ensemble_size) for index in range(len(override_ranges))}
 
@@ -220,6 +221,7 @@ class PfWoFoSt():
         if type(obs_list)!=list:
             obs_list = [obs_list]
         for obs in obs_list:
+            self._observations[obs[0]] = obs[1]
             print("\n=====[Assimilate] Currently on observation {}/{} with {} particles".format(obs_list.index(obs)+1,len(obs_list), len(self.particle_set)))
             self.assimilate(obs)
             print("[Assimilate] Updated weights. Current LAI estimate: ",self.estimate())
@@ -266,13 +268,12 @@ class PfWoFoSt():
         return specifics[specific]
     
     def evaluate(self):
+
         def diff(a,b):
             t = 0
             for el in set(a.keys()).intersection(b.keys()):
                 t+= (a[el]-b[el])**2
-            return t
+            return np.root(t/len(set(a.keys().intersection(b.keys())))) # RMSE
+        
         globalv = {}
-        for iter in self.ensemble:
-            globalv[iter] = diff(pd.DataFrame(iter.get_output()).set_index('day')['LAI'],
-                                 pd.DataFrame({element:{'LAI':self._observations[element]['LAI'][0], 'SM':self._observations[element]['SM'][0]} for element in self._observations.keys()}).transpose()['LAI'])
-        return pd.DataFrame(globalv)
+        return diff(pd.DataFrame(self.avg()[0]),pd.DataFrame({element:{'LAI':self._observations[element]['LAI'][0], 'SM':self._observations[element]['SM'][0]} for element in self._observations.keys()}).transpose()['LAI'])
