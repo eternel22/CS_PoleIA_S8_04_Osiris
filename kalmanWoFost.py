@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pcse.models import Wofost72_WLP_FD
-from dataproviders import parameters, agromanagement, weather
 import numpy as np
 import pandas as pd
 import copy
@@ -11,33 +10,60 @@ matplotlib.style.use('ggplot')
 
 class KalmanWofostDA():
 
-    def __init__(self, ensemble_size, parameters=parameters, weather=weather,agromanagement=agromanagement, override_parameters=None):
+    def __init__(self, ensemble_size, parameters, weather, agromanagement, override_parameters=None):
         self.__parameters = parameters
         self.__agromanagement = agromanagement
         self.__weather = weather
-        
-        self.__relative_day = 0   
         self.__ensemble_size = ensemble_size
         self._observations = {}
+        self.__override_parameters = override_parameters
+
+        self.__initializeWofostNoDA()
+        self.__initializeEnsemble()
+
+    
+    def __initializeEnsemble(self):
+        
         self.ensemble = []
-        for i in range(ensemble_size):
-            p = copy.deepcopy(parameters)
-            if override_parameters == None:
+
+        for i in range(self.__ensemble_size):
+            p = copy.deepcopy(self.__parameters)
+            if self.__override_parameters == None:
                 Warning("[KalmanWoFoStDA] No override parameters given.")
             else:
-                for par, distr in override_parameters.items():
+                for par, distr in self.__override_parameters.items():
                     # This is were the parameters are modified using the set_override command
                     p.set_override(par, distr[i])
-            member = Wofost72_WLP_FD(p, weather, agromanagement)
+            member = Wofost72_WLP_FD(p, self.__weather, self.__agromanagement)
             self.ensemble.append(member)
+
+    def __initializeWofostNoDA(self):
+        self.__wofost_noDA = Wofost72_WLP_FD(self.__parameters, self.__weather, self.__agromanagement)
+        self.__wofost_noDA.run_till_terminate()
+
+
+    def batchAssimilate(self, observations):
+        """
+        Assimilate observations.
+        Observations should be an array which contains tuples :
+        - date
+        - {"parameter": (value, error)}
+        """
+        for obs in observations:
+            self.assimilate(obs)
+        print("[KalmanWoFostDA] {} observations assimilated".format(len(observations)))
     
-    def assimilate(self, obs):
-        self._observations[obs[0]] = obs[1]
-        print("[KalmanWoFoStDA] Assimilating data for {} on day {} ".format(str(obs[1]), obs[0]))
-        variables_for_DA = obs[1].keys()
+
+    def assimilate(self, obs_data):
+        date = obs_data[0]
+        obs = obs_data[1]
+
+        self._observations[date] = obs
+        print("[KalmanWoFoStDA] Assimilating data for {} on day {} ".format(str(obs), date))
+        variables_for_DA = obs.keys()
         collected_states = []
         for member in self.ensemble:
-            member.run_till(obs[0])
+            member.run_till(date)
             t = {}
             for state in variables_for_DA:
                 t[state] = member.get_variable(state)
@@ -48,7 +74,7 @@ class KalmanWofostDA():
 
         perturbed_obs = []
         for state in variables_for_DA:
-            (value, std) = obs[1][state] # both are empiric values
+            (value, std) = obs[state] # both are empiric values
             d = np.random.normal(value, std, (len(self.ensemble))) # perturb the observation
             perturbed_obs.append(d)
         df_perturbed_obs = pd.DataFrame(perturbed_obs).T
@@ -65,11 +91,38 @@ class KalmanWofostDA():
         # Here we compute the analysed states
         Aa = A + K * (D - (H * A))
         df_Aa = pd.DataFrame(Aa.T, columns=variables_for_DA)
-        df_Aa.head()
 
-        for member, new_states in zip(self.ensemble, df_Aa.itertuples()):
-            _ = member.set_variable("LAI", new_states.LAI)
-            _ = member.set_variable("SM", new_states.SM)
+        for i in range(len(self.ensemble)):
+            member = self.ensemble[i]
+            for state in variables_for_DA:
+                member.set_variable(state, df_Aa.iloc[i][state])
+
+
+    def completeSim(self):
+        for member in self.ensemble:
+            member.run_till_terminate()
+
+    def moveForward(self, days=1):
+        for member in self.ensemble:
+            member.run(days)
+
+    def getResultsWithDA(self):
+        results = []
+        for member in self.ensemble:
+            temp = pd.DataFrame(member.get_output())
+            temp['day'] = pd.to_datetime(temp['day'], format="%Y-%m-%d")
+            temp = temp.set_index("day")
+            results.append(temp)
+        concat_df = pd.concat(results)
+        mean_df = concat_df.groupby(concat_df.index).mean()
+        return mean_df
+
+    def getResultsNoDA(self):
+        df_noDA = pd.DataFrame(self.__wofost_noDA.get_output())
+        df_noDA['day'] = pd.to_datetime(df_noDA['day'], format="%Y-%m-%d")
+        df_noDA = df_noDA.set_index("day")
+        return df_noDA
+
 
     def displayLAIsM(self, average=False, fig=None, axes=None):
         print("[KalmanWoFoStDA] Displaying data for {} up to day {} ".format(len(self.ensemble), self.ensemble[0].get_variable("day")))
@@ -98,18 +151,6 @@ class KalmanWofostDA():
         fig.autofmt_xdate()
         
 
-    def batchAssimilate(self, observations):
-        for obs in observations:
-            self.assimilate(obs)
-        print("[KalmanWoFostDA] {} observations assimilated".format(len(observations)))
-    
-    def completeSim(self):
-        for member in self.ensemble:
-            member.run_till_terminate()
-
-    def moveForward(self, days=1):
-        for member in self.ensemble:
-            member.run(days)
     
     def getState(self, specific="all"):
         returned_states= []
