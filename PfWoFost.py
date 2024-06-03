@@ -113,6 +113,7 @@ class PfWoFoSt():
             for element in self.particle_set.keys():
                 with HiddenPrints():
                     element.run_till(date)
+                return
         else:
             for element in self.particle_set.keys():
                 element.run(days)
@@ -142,12 +143,17 @@ class PfWoFoSt():
         - avancer à l'observation suivante
         - mettre à jour les particules, les poids en conséquence
         """
+        print("Date {}, values:{}".format(obs[0],obs[1]))
         self.moveForward(date=obs[0])
-        curr_value_LAI  = self.get_particles_last_value(STATE='LAI')
-        curr_value_SM   = self.get_particles_last_value(STATE='SM')
-        w_distance_LAI  = np.abs(curr_value_LAI-obs[1])+ 1.e-300
-        w_distance_SM   = np.abs(curr_value_SM-obs[2])+ 1.e-300
-        w_distance      = (scipy.stats.norm(0,0.5).pdf(w_distance_LAI) + scipy.stats.norm(0,0.5).pdf(w_distance_SM))/2
+        w_distance = 0
+        if 'LAI' in obs[1].keys():
+            curr_value_LAI  = self.get_particles_last_value(STATE='LAI')
+            w_distance += scipy.stats.norm(0,0.5).pdf(np.abs(curr_value_LAI-obs[1]['LAI'][0])+ 1.e-300)
+        if 'SM' in obs[1].keys():
+            curr_value_SM   = self.get_particles_last_value(STATE='SM')
+            w_distance += scipy.stats.norm(0,0.5).pdf(np.abs(curr_value_SM-obs[1]['SM'][0])+ 1.e-300)
+        # w_distance      = (scipy.stats.norm(0,0.5).pdf(w_distance_LAI) + scipy.stats.norm(0,0.5).pdf(w_distance_SM))/2
+        w_distance = w_distance/len(obs[1].keys())
         self.weights   *= w_distance
         self.weights   /= sum(self.weights)
 
@@ -172,7 +178,8 @@ class PfWoFoSt():
         """
         D'après les particules, calculer la moyenne et l'écart-type de notre simulation (supposée précise)
         """
-        pos = self.get_particles_last_value()
+        # modifié pour prendre en compte uniquement SM
+        pos = self.get_particles_last_value(STATE='SM')
         mean= np.average(pos,weights=self.weights)
         var = np.average((pos - mean)**2, weights=self.weights, axis=0)
         return mean, var
@@ -224,9 +231,9 @@ class PfWoFoSt():
             self._observations[obs[0]] = obs[1]
             print("\n=====[Assimilate] Currently on observation {}/{} with {} particles".format(obs_list.index(obs)+1,len(obs_list), len(self.particle_set)))
             self.assimilate(obs)
-            print("[Assimilate] Updated weights. Current LAI estimate: ",self.estimate())
-            ax[0].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[1],yerr=obs[1]*0.1, fmt='o',color='red')
-            ax[1].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[2],yerr=obs[2]*0.1, fmt='o',color='red')
+            print("[Assimilate] Updated weights. Current SM estimate: ",self.estimate())
+            # ax[0].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[1][],yerr=obs[1]*0.1, fmt='o',color='red')
+            # ax[1].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[2],yerr=obs[2]*0.1, fmt='o',color='red')
             if self.neff() < self.__ensemble_size/2:
                 print("[Resampling] from neff",self.neff())
                 self.index_resample(self.get_K_top(k),k)
@@ -236,18 +243,24 @@ class PfWoFoSt():
             self.displayLAIsM(fig=fig,ax=ax)
         self.displayLAIsM(fig=fig,ax=ax)
 
-    def avg(self,plot=False,obs_list=[],fig=None, ax=None):
+    def avg(self,plot=False,obs_list=[],fig=None, ax=None,state=None):
         """
         Renvoie la moyenne des particules. Si plot=True, affiche le graphique.
         """
         sum1 = pd.DataFrame()
         sum2 = pd.DataFrame()
-        if fig is None:
+        sum3 = pd.DataFrame()
+        if fig is None and plot == True:
             fig, ax = plt.subplots(2,1)
+            pass
         for element in self.particle_set:
             sum1[element] = pd.DataFrame(element.get_output())['LAI']
             sum2[element] = pd.DataFrame(element.get_output())['SM']
+            if state != None:
+                sum3[element] = pd.DataFrame(element.get_output())[state]
         if not plot:
+            if state != None:
+                return sum1.mean(axis=1), sum2.mean(axis=1), sum3.mean(axis=1)
             return sum1.mean(axis=1), sum2.mean(axis=1)
         x = list(pd.DataFrame(element.get_output())['day'])
         ax[0].plot(sum1.mean(axis=1),color='black')
@@ -277,3 +290,10 @@ class PfWoFoSt():
         
         globalv = {}
         return diff(pd.DataFrame(self.avg()[0]),pd.DataFrame({element:{'LAI':self._observations[element]['LAI'][0], 'SM':self._observations[element]['SM'][0]} for element in self._observations.keys()}).transpose()['LAI'])
+    
+    def get_df(self):
+        results = pd.DataFrame({'day':pd.DataFrame(list(self.particle_set.keys())[0].get_output())['day'],
+                                'SM':pd.DataFrame(self.avg()).transpose()[1],
+                                'TAGP':pd.DataFrame(self.avg(state='TAGP')).transpose()[2]})
+        results.set_index('day',inplace=True)
+        return results
