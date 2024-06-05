@@ -85,6 +85,9 @@ class PfWoFoSt():
         self.__ensemble_size        = ensemble_size
         self.__override_parameters  = override_parameters
         self.__override_ranges      = override_ranges
+        self.__parameters           = parameters
+        self.__weather              = weather
+        self.__agromanagement       = agromanagement
         self.date                   = None
         self._observations = {}
 
@@ -272,6 +275,17 @@ class PfWoFoSt():
     def get_current_date(self):
         return list(self.particle_set.keys())[0].get_variable("day")
 
+    def __initializeWofostNoDA(self):
+        self.__wofost_noDA = Wofost72_WLP_FD(self.__parameters, self.__weather, self.__agromanagement)
+        self.__wofost_noDA.run_till_terminate()
+
+    def getResultsNoDA(self):
+        self.__initializeWofostNoDA()
+        df_noDA = pd.DataFrame(self.__wofost_noDA.get_output())
+        df_noDA['day'] = pd.to_datetime(df_noDA['day'], format="%Y-%m-%d")
+        df_noDA = df_noDA.set_index("day")
+        return df_noDA
+    
     def completeSim(self):
         for element in self.particle_set:
             element.run_till_terminate()
