@@ -1,9 +1,9 @@
 import numpy as np
-import matplotlib
+
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+
 from scipy.interpolate import griddata
-import csv
+
 import pandas as pd
 
 class Spatial_grid:
@@ -38,7 +38,7 @@ class Spatial_grid:
         plt.show()
 
     def cell_size(self):
-        X, Y, Z = self.interpolate()
+        X, Y, _ = self.interpolate()
         dx = np.mean(np.diff(X[0, :]))
         dy = np.mean(np.diff(Y[:, 0]))
         return dx, dy
@@ -88,12 +88,23 @@ class HumidityData:
             setattr(self, f'humidity{k}', [])
 
     def read_data(self):
-        data = pd.read_csv(self.file_path, sep=';')
-        self.time = data['Date/heure'].tolist()
-        for k in range(1, 7):
-            setattr(self, f'humidity{k}', data[f'EAG Humidité du sol {k} [%]'].tolist())
-
+        # xlsx version
+        if self.type == "xlsx":
+            # On prends à partir de 1 car le rang 0 contient ici le nom de la colonne
+            data = pd.read_excel(self.file_path)
+            self.time = data['Unnamed: 0'].tolist()
+            self.time = pd.to_datetime(self.time[1::])
+            for k in range(1, 7):
+                setattr(self, f'humidity{k}', data[f'EAG Humidité du sol {k} [%]'].tolist()[1::])
+        elif self.type == 'csv':
+            data = pd.read_csv(self.file_path, sep=';')
+            data['Date/heure'] = pd.to_datetime(data['Date/heure'])
+            self.time = data['Date/heure'].tolist()
+            for k in range(1, 7):
+                setattr(self, f'humidity{k}', data[f'EAG Humidité du sol {k} [%]'].tolist())
+        else:
+            print('File {} is of type _{}_ not supported'.format(self.file_path, self.type))
+            
     def get_humidity_values(self):
         return {'time': self.time, 'humidity1': self.humidity1, 'humidity2': self.humidity2, 'humidity3': self.humidity3,
                 'humidity4': self.humidity4, 'humidity5': self.humidity5, 'humidity6': self.humidity6}
-
