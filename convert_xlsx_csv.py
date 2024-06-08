@@ -50,7 +50,7 @@ class Converter:
                 continue
 
 # Usage example
-path = 'DATA/Probes/'
+path = 'data/Data 2022/Probes'
 
 convert = Converter(path)
 convert.folder_convert()
