@@ -1,5 +1,4 @@
 import pandas as pd
-import pandas as pd
 import os
 
 class Converter:
@@ -27,7 +26,7 @@ class Converter:
             df_csv = df_csv.iloc[:, [0] + list(range(4, len(df_csv.columns)))]
         if 'Température sèche [°C]' in first_line:
             df_csv = df_csv.iloc[:, [0] + list(range(4, len(df_csv.columns)))]
-            
+
         header = ['Date/heure', 'Précipitations [mm]', 'EAG Humidité du sol 1 [%]',
                   'EAG Humidité du sol 2 [%]', 'EAG Humidité du sol 3 [%]', 'EAG Humidité du sol 4 [%]',
                   'EAG Humidité du sol 5 [%]', 'EAG Humidité du sol 6 [%]', 'Température du sol MOY 1 [°C]',
@@ -39,9 +38,8 @@ class Converter:
                   'Température du sol MAX 6 [°C]', 'Température du sol MIN 6 [°C]', 'Panneau solaire [mV]',
                   'Batterie [mV]']
 
-        header_to_str = ';'.join(header)
         df_csv.columns = header
-
+        df_csv = df_csv.sort_values(by='Date/heure').reset_index(drop=True)
         df_csv.to_csv(csv_path, index=False, sep=';')
 
     def folder_convert(self):
