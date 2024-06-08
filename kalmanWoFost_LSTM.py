@@ -8,7 +8,7 @@ import copy
 import matplotlib
 matplotlib.style.use('ggplot')
 
-class KalmanWofostDA():
+class KalmanWofostDA_LSTM():
 
     def __init__(self, ensemble_size, parameters, weather, agromanagement, override_parameters=None):
         self.__parameters = parameters
@@ -44,7 +44,7 @@ class KalmanWofostDA():
         self.__wofost_noDA.run_till_terminate()
 
 
-    def batchAssimilate(self, observations):
+    def batchAssimilate(self, observations, models):
         """
         Assimilate observations.
         Observations should be an array which contains tuples :
@@ -53,6 +53,7 @@ class KalmanWofostDA():
         """
         self.__observations_for_DA = observations
         self.__dates_of_observation = [data[0] for data in observations]
+        self.__models = models
         for obs in observations:
             self.assimilate(obs)
         print("[KalmanWoFostDA] {} observations assimilated".format(len(observations)))
@@ -92,44 +93,15 @@ class KalmanWofostDA():
         self.trainX.append(states)
         # ==== END trainX
 
+        sampleX = np.array([np.transpose(states)])
+        predictY = self.__models[len(self.trainX)-1].predict(sampleX)[0]
             
-        for member in self.ensemble:
-            t = {}
-            for state in variables_for_DA:
-                t[state] = member.get_variable(state)
-            collected_states.append(t)
-        df_A = pd.DataFrame(collected_states)
-        A = np.matrix(df_A).T
-        P_e = np.matrix(df_A.cov())
-
-
-        perturbed_obs = []
-        for state in variables_for_DA:
-            (value, std) = obs[state] # both are empiric values
-            d = np.random.normal(value, std, (len(self.ensemble))) # perturb the observation
-            perturbed_obs.append(d)
-        df_perturbed_obs = pd.DataFrame(perturbed_obs).T
-        df_perturbed_obs.columns = variables_for_DA
-        D = np.matrix(df_perturbed_obs).T
-        R_e = np.matrix(df_perturbed_obs.cov())
-
-        # Here we compute the Kalman gain
-        H = np.identity(len(obs))
-        K1 = P_e * (H.T)
-        K2 = (H * P_e) * H.T
-        K = K1 * ((K2 + R_e).I)
-
-        # Here we compute the analysed states
-        Aa = A + K * (D - (H * A))
-        df_Aa = pd.DataFrame(Aa.T, columns=variables_for_DA)
-
 
         corrected_states = []
         for i in range(len(self.ensemble)):
             member = self.ensemble[i]
-            for state in variables_for_DA:
-                member.set_variable(state, df_Aa.iloc[i][state])
-            corrected_states.append(df_Aa.iloc[i]["SM"])
+            member.set_variable("SM", predictY[i])
+            corrected_states.append(predictY[i])
         self.trainY.append(corrected_states)
 
 

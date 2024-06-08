@@ -7,8 +7,9 @@ import pandas as pd
 import copy
 import matplotlib
 matplotlib.style.use('ggplot')
+import kalmanWoFost
 
-class KalmanWofostDA():
+class EnKF_LSTM():
 
     def __init__(self, ensemble_size, parameters, weather, agromanagement, override_parameters=None):
         self.__parameters = parameters
@@ -17,8 +18,8 @@ class KalmanWofostDA():
         self.__ensemble_size = ensemble_size
         self._observations = {}
         self.__override_parameters = override_parameters
-        self.trainX = []
-        self.trainY = []
+
+
 
         self.__initializeWofostNoDA()
         self.__initializeEnsemble()
@@ -31,7 +32,7 @@ class KalmanWofostDA():
         for i in range(self.__ensemble_size):
             p = copy.deepcopy(self.__parameters)
             if self.__override_parameters == None:
-                Warning("[KalmanWoFoStDA] No override parameters given.")
+                Warning("[EnKF-LSTM] No override parameters given.")
             else:
                 for par, distr in self.__override_parameters.items():
                     # This is were the parameters are modified using the set_override command
@@ -51,11 +52,10 @@ class KalmanWofostDA():
         - date
         - {"parameter": (value, error)}
         """
-        self.__observations_for_DA = observations
-        self.__dates_of_observation = [data[0] for data in observations]
+        self.__observations
         for obs in observations:
             self.assimilate(obs)
-        print("[KalmanWoFostDA] {} observations assimilated".format(len(observations)))
+        print("[EnKF-LSTM] {} observations assimilated".format(len(observations)))
     
 
     def assimilate(self, obs_data):
@@ -63,37 +63,48 @@ class KalmanWofostDA():
         obs = obs_data[1]
 
         self._observations[date] = obs
-        print("[KalmanWoFoStDA] Assimilating data for {} on day {} ".format(str(obs), date))
+        print("[EnKF-LSTM] Assimilating data for {} on day {} ".format(str(obs), date))
         variables_for_DA = obs.keys()
         collected_states = []
         for member in self.ensemble:
             member.run_till(date)
-
-        # ==== BEGIN trainX 
-        states = []
+        
+        results = []
         for member in self.ensemble:
             temp = pd.DataFrame(member.get_output())
             temp['day'] = pd.to_datetime(temp['day'], format="%Y-%m-%d")
             temp = temp.set_index("day")
-            states.append(temp["SM"].to_numpy())
+            results.append(temp["SM"].to_numpy())
+        results = np.array(results)
         
-        v_t = []
-        for date, row in temp.iterrows():
-            if(date in self.__dates_of_observation):
-                for data in self.__observations_for_DA:
-                    if(data[0] != date):
-                        continue
-                    v_t.append(data[1]["SM"][0])
-            else:
-                v_t.append(-1)
-        states.append(v_t)
+        SMs = np.transpose(results) # (nb_donnees, ensemble_size)
+        n_time_actuel = SMs.shape[0]-1
 
-        states = np.array(states)
-        self.trainX.append(states)
-        # ==== END trainX
+        print("results:", results.shape)
+        print("n_time_actuel", n_time_actuel)
 
-            
-        for member in self.ensemble:
+        x_lstm = np.array([np.concatenate((SMs, v_t_reshape[:n_time_actuel+1]), axis=1)])
+
+        #print("SMs", SMs.shape)
+        print("x_lstm", x_lstm.shape)
+        print(x_lstm[0][1])
+
+        y_lstm = models[n_time_actuel].predict(x_lstm)[0]
+
+        print("y_lstm", y_lstm.shape)
+        print(y_lstm)
+        break
+        
+        for i in range(len(ensemble)):
+            member = ensemble[i]
+            print("Member", i," SM", member.get_variable("SM"), ">", y_lstm[i])
+            member.set_variable("SM", y_lstm[i])
+
+
+
+
+
+
             t = {}
             for state in variables_for_DA:
                 t[state] = member.get_variable(state)
@@ -101,7 +112,6 @@ class KalmanWofostDA():
         df_A = pd.DataFrame(collected_states)
         A = np.matrix(df_A).T
         P_e = np.matrix(df_A.cov())
-
 
         perturbed_obs = []
         for state in variables_for_DA:
@@ -123,14 +133,10 @@ class KalmanWofostDA():
         Aa = A + K * (D - (H * A))
         df_Aa = pd.DataFrame(Aa.T, columns=variables_for_DA)
 
-
-        corrected_states = []
         for i in range(len(self.ensemble)):
             member = self.ensemble[i]
             for state in variables_for_DA:
                 member.set_variable(state, df_Aa.iloc[i][state])
-            corrected_states.append(df_Aa.iloc[i]["SM"])
-        self.trainY.append(corrected_states)
 
 
     def completeSim(self):
