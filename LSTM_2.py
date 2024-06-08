@@ -7,7 +7,7 @@ import pandas as pd
 import copy
 import matplotlib
 matplotlib.style.use('ggplot')
-import kalmanWoFost
+import SOURCE.kalmanWoFost as kalmanWoFost
 
 class EnKF_LSTM():
 

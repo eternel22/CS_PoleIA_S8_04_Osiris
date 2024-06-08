@@ -3,7 +3,7 @@ from keras.models import Sequential
 from keras.layers import LSTM, Dense
 import pandas as pd
 from pcse.models import Wofost72_WLP_FD
-import kalmanWoFost
+import SOURCE.kalmanWoFost as kalmanWoFost
 import copy
 from sklearn.metrics import mean_squared_error
 
