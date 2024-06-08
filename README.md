@@ -26,9 +26,9 @@ Afin de mener à bien cet objectif d'utilisation des données clients, il est é
 
 ## Structure
 
-Le répositoire Git est structuré en 3 parties. Un dossier `SOURCES` contient les fichiers `py` avec les classes de chaque méthode ainsi que des classes utilitaires.
+Le répositoire Git est structuré en 2 parties. Un dossier `SOURCES` contient les fichiers `py` avec les classes de chaque méthode ainsi que des classes utilitaires. C'est là que se trouve le gros du code qui permet de faire tourner les modèles.
 
-Un autre dossier `DEMO` contient l'ensemble des Jupyter utile à l'exécution du projet. On y trouver des fichiers nommé `<méthode>_demo.ipynb` qui correspondent au démo de chaque méthode. Ces démonstrations sont adaptées au données du client et permettent de mesurer efficacement les performances de chaque technique d'assimilation pour régler le modèle au mesures.
+Un autre dossier `DEMO` contient l'ensemble des `Jupyter` utile à l'exécution du projet. On y trouver des fichiers nommé `<méthode>_demo.ipynb` qui correspondent au démonstration de chaque méthode, adaptées au données du client et permettent de mesurer efficacement les performances de chaque technique d'assimilation pour réajuster le modèle au mesures. Ce sont là les résultats pratiques de notre projet.
 
 Le dossier `DEMO`contient également un sous-dossier `data` contenant l'ensemble des paramètres et données utilisées par le modèle. Il y en a de deux types: celles fournies par le client, qui relève donc de mesures expérimentales dans des champs d'agriculteurs, et celles intrinsèques à WOFOST, le modèle de simulation des cultures utilisé dans l'ensemble du projet, et qui permettent donc le fonctionnement des simulations.
 
