@@ -1,0 +1,8 @@
+pandas
+matplotlib
+pcse
+numpy
+spotpy
+datetime
+tensorflow
+scipy

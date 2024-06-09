@@ -7,8 +7,9 @@ Projet d'IA de CentraleSupélec du S8 pour <i>Osiris Agriculture</i> sur l'assim
 Pour installer le projet, clonez le repository git et installez les dépendances :
 ```bash
 git clone CS_POLEIA_S8_04_OSIRIS
-py -m pip install requirements.txt
+py -m pip install -r .\requirements.txt
 ```
+Cela vous permettra de faire fonctionner l'ensemble de nos scripts sur vos machines.
 
 ## Objectif
 

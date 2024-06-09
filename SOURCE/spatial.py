@@ -84,6 +84,7 @@ class HumidityData:
     def __init__(self, file_path):
         self.file_path = file_path
         self.time = []
+        self.type = file_path.split('.')[-1]
         for k in range(1, 7):
             setattr(self, f'humidity{k}', [])
 
