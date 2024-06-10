@@ -1,5 +1,8 @@
 from pcse.models import Wofost72_WLP_FD, Wofost72_PP
 import matplotlib.pyplot as plt
+'''
+Ce fichier contient des fonctions utilitaires pour le projet.
+'''
 
 def getWofost_WaterLimited(parameters, weatherdataprovider, agromanagement):
     return Wofost72_WLP_FD(parameters, weatherdataprovider, agromanagement)

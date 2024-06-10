@@ -33,7 +33,7 @@ class ParticleSetWoFoSt():
         - override_parameters: respecter le format (NomParamètre,[valeur]*ensemble_size)
         
         Sortie:
-        - Aucune. Élément "set" initialisé, contenant les paramètres.
+        - Aucune. Élément "set" initialisé, contenant les paramètres et des simulations WOFOST.
 
         '''
         self.__ensemble_size = ensemble_size
@@ -44,7 +44,7 @@ class ParticleSetWoFoSt():
                 Warning("[ParticleSetWoFoSt] No override parameters given.")
             else:
                 for par, distr in override_parameters.items():
-                    # This is were the parameters are modified using the set_override command and the distribution given in override_parameters
+                    # On modifie les paramètres ici selon les distributions données en argument
                     p.set_override(par, distr[i])
             member = Wofost72_WLP_FD(p, weather, agromanagement)
             self.ensemble.append(member)
@@ -121,7 +121,7 @@ class PfWoFoSt():
             for element in self.particle_set.keys():
                 element.run(days)
 
-        # Let's clean the ensemble: we will drop elements that are negative
+        # On nettoie l'ensemble des particules en enlevant celles qui sont absurdes
         values = self.get_particles_last_value()
         for iV in range(len(values)):
             if values[iV]<0:
@@ -181,13 +181,17 @@ class PfWoFoSt():
         """
         D'après les particules, calculer la moyenne et l'écart-type de notre simulation (supposée précise)
         """
-        # modifié pour prendre en compte uniquement SM
+        # modifié pour prendre en compte uniquement SM: pour prendre à la fois LAI et SM, décommenter la ligne suivante
+        # pos = self.get_particles_last_value(STATE='LAI') + self.get_particles_last_value(STATE='SM')
         pos = self.get_particles_last_value(STATE='SM')
         mean= np.average(pos,weights=self.weights)
         var = np.average((pos - mean)**2, weights=self.weights, axis=0)
         return mean, var
 
     def neff(self):
+        '''
+        Calculer le nombre effectif de particules.
+        '''
         return 1. / np.sum(np.square(self.weights))
 
     def index_resample(self,indexes,k=5):
@@ -195,12 +199,12 @@ class PfWoFoSt():
         D'après une liste d'index, recréer de nouvelles particules proches de ces index.
         """
         keys = list(self.particle_set.keys())
-        # Keep the top 5 particles and their weights
+        # Conserver les 5 meilleures particules
         self.particle_set = {keys[index]:self.particle_set[keys[index]] for index in indexes}
         top_weights = [self.weights[index] for index in indexes] 
         top_weights /= sum(top_weights)
-        # we have the core particles. Let's add some more:
-        # First, gather information on top particles:
+
+        # Calculer les nouvelles valeurs pour les paramètres
         ranges = []
 
         for name in self.__override_parameters:
@@ -211,13 +215,16 @@ class PfWoFoSt():
         print("[Resampled] New ranges: ", ranges)
         new_override_parameters = {self.__override_parameters[index]:np.random.normal(ranges[index][0],ranges[index][1], self.__ensemble_size) for index in range(len(ranges))}
         
-        # Now, let's add some more particles:
+        # On complète les particules avec les nouvelles valeurs
         new_set = ParticleSetWoFoSt(self.__ensemble_size-k,override_parameters=new_override_parameters)
         self.particle_set = self.particle_set | new_set.set
         self.log_part = self.log_part | self.particle_set
         self.weights = [1/self.__ensemble_size]*self.__ensemble_size
 
     def get_K_top(self,k=5):
+        """
+        Renvoie les k meilleures particules.
+        """
         indexes = []
         d = self.weights.copy()
         for i in range(k):
@@ -226,6 +233,9 @@ class PfWoFoSt():
         return indexes
 
     def batchAssimilate(self,obs_list):
+        """
+        Assimiler une liste d'observations.
+        """
         k=int(self.__ensemble_size/2)
         fig, ax = plt.subplots(2,1,figsize=(16,16))
         if type(obs_list)!=list:
@@ -235,12 +245,11 @@ class PfWoFoSt():
             print("\n=====[Assimilate] Currently on observation {}/{} with {} particles".format(obs_list.index(obs)+1,len(obs_list), len(self.particle_set)))
             self.assimilate(obs)
             print("[Assimilate] Updated weights. Current SM estimate: ",self.estimate())
-            # ax[0].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[1][],yerr=obs[1]*0.1, fmt='o',color='red')
-            # ax[1].errorbar(len(pd.DataFrame(list(self.particle_set.keys())[0].get_output())['LAI']),obs[2],yerr=obs[2]*0.1, fmt='o',color='red')
+            
             if self.neff() < self.__ensemble_size/2:
                 print("[Resampling] from neff",self.neff())
                 self.index_resample(self.get_K_top(k),k)
-                # recompute weights with new particles
+            
                 self.assimilate(obs)
                 print("[Resampling] New estimate:",self.estimate())
             self.displayLAIsM(fig=fig,ax=ax)
@@ -273,13 +282,22 @@ class PfWoFoSt():
             ax[1].errorbar((obs[0] - list(self.particle_set.keys())[0].get_output()[0]['day']).days,obs[2],yerr=obs[2]*0.2, fmt='o',color='red')
     
     def get_current_date(self):
+        """
+        Renvoie la date actuelle de la simulation.
+        """
         return list(self.particle_set.keys())[0].get_variable("day")
 
     def __initializeWofostNoDA(self):
+        """
+        Initialiser une simulation WoFoSt sans DA.
+        """
         self.__wofost_noDA = Wofost72_WLP_FD(self.__parameters, self.__weather, self.__agromanagement)
         self.__wofost_noDA.run_till_terminate()
 
     def getResultsNoDA(self):
+        """
+        Renvoie les résultats de la simulation WoFoSt sans DA.
+        """
         self.__initializeWofostNoDA()
         df_noDA = pd.DataFrame(self.__wofost_noDA.get_output())
         df_noDA['day'] = pd.to_datetime(df_noDA['day'], format="%Y-%m-%d")
@@ -287,25 +305,34 @@ class PfWoFoSt():
         return df_noDA
     
     def completeSim(self):
+        """
+        Renvoie les résultats de la simulation WoFoSt avec DA.
+        """
         for element in self.particle_set:
             element.run_till_terminate()
     
     def getState(self, specific="all"):
+        """
+        Renvoie les paramètres, les conditions météorologiques et les données de gestion agricole.
+        """
         specifics = {"all": [self.__parameters,self.__weather, self.__agromanagement]}
         return specifics[specific]
     
     def evaluate(self):
-
+        """
+        Renvoie la racine de l'erreur quadratique moyenne entre les valeurs observées et les valeurs simulées.
+        """
         def diff(a,b):
             t = 0
             for el in set(a.keys()).intersection(b.keys()):
                 t+= (a[el]-b[el])**2
             return np.root(t/len(set(a.keys().intersection(b.keys())))) # RMSE
-        
-        globalv = {}
         return diff(pd.DataFrame(self.avg()[0]),pd.DataFrame({element:{'LAI':self._observations[element]['LAI'][0], 'SM':self._observations[element]['SM'][0]} for element in self._observations.keys()}).transpose()['LAI'])
     
     def get_df(self):
+        """
+        Renvoie les résultats de la simulation WoFoSt avec DA sous forme de DataFrame.
+        """
         results = pd.DataFrame({'day':pd.DataFrame(list(self.particle_set.keys())[0].get_output())['day'],
                                 'SM':pd.DataFrame(self.avg()).transpose()[1],
                                 'TAGP':pd.DataFrame(self.avg(state='TAGP')).transpose()[2]})

@@ -25,6 +25,13 @@ class KalmanWofostDA():
 
     
     def __initializeEnsemble(self):
+        """
+        Initialize the ensemble of models.
+        Inputs:
+        - None
+        Outputs:
+        - None
+        """
         
         self.ensemble = []
 
@@ -47,6 +54,11 @@ class KalmanWofostDA():
     def batchAssimilate(self, observations):
         """
         Assimilate observations.
+        Inputs:
+        - observations: list of observations to assimilate.
+        Outputs:
+        - None
+
         Observations should be an array which contains tuples :
         - date
         - {"parameter": (value, error)}
@@ -59,6 +71,17 @@ class KalmanWofostDA():
     
 
     def assimilate(self, obs_data):
+        """
+        Assimilate a single observation.
+        Inputs:
+        - obs_data: observation to assimilate.
+        Outputs:
+        - None
+
+        obs_data is a tuple :
+        - date
+        - {"parameter": (value, error)}
+        """
         date = obs_data[0]
         obs = obs_data[1]
 
@@ -134,14 +157,35 @@ class KalmanWofostDA():
 
 
     def completeSim(self):
+        """
+        Run the ensemble until the end of the simulation.
+        Inputs:
+        - None
+        Outputs:
+        - None
+        """
         for member in self.ensemble:
             member.run_till_terminate()
 
     def moveForward(self, days=1):
+        """
+        Increment the simulation by a given number of days.
+        Inputs:
+        - days: number of days to increment the simulation.
+        Outputs:
+        - None
+        """
         for member in self.ensemble:
             member.run(days)
 
     def getResultsAllModel(self, columnName):
+        """
+        Get the results of a given column for all models in the ensemble.
+        Inputs:
+        - columnName: name of the column to get.
+        Outputs:
+        - results: array of results.
+        """
         results = []
         for member in self.ensemble:
             temp = pd.DataFrame(member.get_output())
@@ -151,6 +195,13 @@ class KalmanWofostDA():
         return np.array(results)
 
     def getResultsWithDA(self):
+        """
+        Get the results of the ensemble with DA.
+        Inputs:
+        - None
+        Outputs:
+        - results: DataFrame containing the results of the ensemble as the mean of all models.
+        """
         results = []
         for member in self.ensemble:
             temp = pd.DataFrame(member.get_output())
@@ -162,6 +213,13 @@ class KalmanWofostDA():
         return mean_df
 
     def getResultsNoDA(self):
+        """
+        Get the results of the ensemble without DA.
+        Inputs:
+        - None
+        Outputs:
+        - results: DataFrame containing the results of the ensemble without DA.
+        """
         df_noDA = pd.DataFrame(self.__wofost_noDA.get_output())
         df_noDA['day'] = pd.to_datetime(df_noDA['day'], format="%Y-%m-%d")
         df_noDA = df_noDA.set_index("day")
@@ -169,6 +227,16 @@ class KalmanWofostDA():
 
 
     def displayLAIsM(self, average=False, fig=None, axes=None):
+        """
+        Display the LAI and Soil Moisture of the ensemble.
+        Inputs:
+        - average: boolean to display the average of the ensemble.
+        - fig: figure to display the results.
+        - axes: axes to display the results.
+        Outputs:
+        - None, but plots the results.
+        """
+
         print("[KalmanWoFoStDA] Displaying data for {} up to day {} ".format(len(self.ensemble), self.ensemble[0].get_variable("day")))
         results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
         if fig == None:
@@ -197,23 +265,43 @@ class KalmanWofostDA():
 
     
     def getState(self, specific="all"):
-        returned_states= []
+        """ 
+        Get the state of the model.
+        Inputs:
+        - specific: specific state to get.
+        Outputs:
+        - state: state of the model.
+        """
         specifics = {"all": [self.__parameters,self.__weather, self.__agromanagement]}
         return specifics[specific]
 
     def evaluate(self):
+        """
+        Evaluate the ensemble.
+        Inputs:
+        - None
+        Outputs:
+        - DataFrame containing the evaluation of the ensemble.
+        """
         def diff(a,b):
             t = 0
             for el in set(a.keys()).intersection(b.keys()):
                 t+= (a[el]-b[el])**2
             return t
         globalv = {}
-        for iter in k.ensemble:
+        for iter in self.ensemble:
             globalv[iter] = diff(pd.DataFrame(iter.get_output()).set_index('day')['LAI'],
-                                 pd.DataFrame({element:{'LAI':k._observations[element]['LAI'][0], 'SM':k._observations[element]['SM'][0]} for element in k._observations.keys()}).transpose()['LAI'])
+                                 pd.DataFrame({element:{'LAI':self._observations[element]['LAI'][0], 'SM':self._observations[element]['SM'][0]} for element in self._observations.keys()}).transpose()['LAI'])
         return pd.DataFrame(globalv)
     
     def get_avg_RMSE(self):
+        """
+        Get the average RMSE of the ensemble.
+        Inputs:
+        - None
+        Outputs:
+        - None, but prints the average RMSE of the ensemble.
+        """
         val_sm = [element['SM'][0] for element in self._observations.values()]
         val_lai = [element['LAI'][0] for element in self._observations.values()]
         results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
@@ -225,19 +313,6 @@ class KalmanWofostDA():
             RMSE_sm.append(np.sqrt(np.mean((member_df.loc[observed_days, "SM"] - val_sm)**2)))
             RMSE_lai.append(np.sqrt(np.mean((member_df.loc[observed_days,"LAI"]-val_lai)**2)))
         
-        return print('AVG RMSE LAI =', np.mean(RMSE_lai), ', AVG RMSE SM =', np.mean(RMSE_sm))
+        print('AVG RMSE LAI =', np.mean(RMSE_lai), ', AVG RMSE SM =', np.mean(RMSE_sm))
     
-    def get_RMSE_avg(self):
-        val_sm = [element['SM'][0] for element in self._observations.values()]
-        val_lai = [element['LAI'][0] for element in self._observations.values()]
-        results = [pd.DataFrame(member.get_output()).set_index("day") for member in self.ensemble]
-        observed_days = list(self._observations.keys())
-        temp_lai= []
-        temp_sm = []
-        for member_df in results:
-            temp_sm.append(member_df.loc[[x + dt.timedelta(days=1) for x in observed_days], "SM"])
-            temp_lai.append(member_df.loc[[x + dt.timedelta(days=1) for x in observed_days], "LAI"])
-        RMSE_lai = np.sqrt(np.mean((np.mean(temp_lai, axis=0) - val_lai)**2))
-        RMSE_sm = np.sqrt(np.mean((np.mean(temp_sm, axis=0) - val_sm)**2))
-        return print('RMSE of AVG LAI =', RMSE_lai, ', RMSE of AVG SM =', RMSE_sm)
 
