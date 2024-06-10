@@ -1,7 +1,7 @@
-![alt text](1200px-Logo_CentraleSupélec.svg.png)
+![Logo CS](1200px-Logo_CentraleSupélec.svg.png)
 # S8IA - Assimilation de Données Agricoles
 
-Projet d'IA de CentraleSupélec du S8 pour <i>Osiris Agriculture</i> sur l'assimilation de données agricoles dans le but de spécifier un modèle de croissance de cultures. Le but final de notre client est de pouvoir prédire efficacement la croissance des cultures pour prévoir les besoins en irrigation de façon précise et réduire la consommation d'eau des agriculteurs.
+Vous retrouverez sur ce git le Projet d'IA du Semestre 8 de CentraleSupélec du S8 pour <i>Osiris Agriculture</i> sur l'assimilation de données agricoles dans le but de spécifier un modèle de croissance de cultures. Le but final de notre client est de pouvoir prédire efficacement la croissance des cultures pour prévoir les besoins en irrigation de façon précise et réduire la consommation d'eau des agriculteurs.
 
 ## Installation
 Pour installer le projet, clonez le repository git et installez les dépendances :
@@ -37,7 +37,7 @@ Le dossier `DEMO`contient également un sous-dossier `data` contenant l'ensemble
 
 Revenons brièvement sur WOFOST: c'est le noyau sur lequel repose les simulations de ce projet. Le module WOFOST permet de simuler la croissance de plantes, en fonction de différents paramètres. L'objectf du projet est de réussir à simuler cette même croissance, pour des plantes non encore dans la base de données de WOFOST au travers de l'assimilation de donnée. Ci-dessous, un graphique superposant la courbe d'humidité du sol de la simulation WOFOST et celle des observations. Notre objectif sera de réduire au maximum l'écart entre les deux courbes.
 
-![alt text](image.png)
+![Tracé des données superposées à une simulation WOFOST avec les données de départ](tracéSMsimulation.png)
 
 La courbe rouge correspond à la prédiction d'un modèle WOFOST réglé grossièrement sur des paramètres proches de ceux du champ.
 
